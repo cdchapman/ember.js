@@ -35,17 +35,17 @@ function isKeyName(path) {
 
 // ..........................................................
 // DEPENDENT KEYS
-// 
+//
 
 var DEP_SKIP = { __emberproto__: true }; // skip some keys and toString
-function iterDeps(methodName, obj, depKey, seen) {
-  
+function iterDeps(method, obj, depKey, seen, meta) {
+
   var guid = guidFor(obj);
   if (!seen[guid]) seen[guid] = {};
   if (seen[guid][depKey]) return ;
   seen[guid][depKey] = true;
-  
-  var deps = meta(obj, false).deps, method = Ember[methodName];
+
+  var deps = meta.deps;
   deps = deps && deps[depKey];
   if (deps) {
     for(var key in deps) {
@@ -59,18 +59,18 @@ function iterDeps(methodName, obj, depKey, seen) {
 var WILL_SEEN, DID_SEEN;
 
 // called whenever a property is about to change to clear the cache of any dependent keys (and notify those properties of changes, etc...)
-function dependentKeysWillChange(obj, depKey) {
+function dependentKeysWillChange(obj, depKey, meta) {
   var seen = WILL_SEEN, top = !seen;
   if (top) seen = WILL_SEEN = {};
-  iterDeps('propertyWillChange', obj, depKey, seen);
+  iterDeps(propertyWillChange, obj, depKey, seen, meta);
   if (top) WILL_SEEN = null;
 }
 
 // called whenever a property has just changed to update dependent keys
-function dependentKeysDidChange(obj, depKey) {
+function dependentKeysDidChange(obj, depKey, meta) {
   var seen = DID_SEEN, top = !seen;
   if (top) seen = DID_SEEN = {};
-  iterDeps('propertyDidChange', obj, depKey, seen);
+  iterDeps(propertyDidChange, obj, depKey, seen, meta);
   if (top) DID_SEEN = null;
 }
 
@@ -206,6 +206,7 @@ Wp.add = function(path) {
   // put into a queue and try to connect later.
   } else if (!tuple[0]) {
     pendingQueue.push([this, path]);
+    tuple.length = 0;
     return;
 
   // global path, and object already exists
@@ -216,6 +217,7 @@ Wp.add = function(path) {
     path = tuple[1];
   }
 
+  tuple.length = 0;
   this.chain(key, path, src, separator);
 };
 
@@ -240,6 +242,7 @@ Wp.remove = function(path) {
     path = tuple[1];
   }
 
+  tuple.length = 0;
   this.unchain(key, path);
 };
 
@@ -502,11 +505,11 @@ Ember.rewatch = function(obj) {
     
   @returns {void}
 */
-Ember.propertyWillChange = function(obj, keyName) {
+var propertyWillChange = Ember.propertyWillChange = function(obj, keyName) {
   var m = meta(obj, false), proto = m.proto, desc = m.descs[keyName];
   if (proto === obj) return ;
   if (desc && desc.willChange) desc.willChange(obj, keyName);
-  dependentKeysWillChange(obj, keyName);
+  dependentKeysWillChange(obj, keyName, m);
   chainsWillChange(obj, keyName);
   Ember.notifyBeforeObservers(obj, keyName);
 };
@@ -528,11 +531,11 @@ Ember.propertyWillChange = function(obj, keyName) {
     
   @returns {void}
 */
-Ember.propertyDidChange = function(obj, keyName) {
+var propertyDidChange = Ember.propertyDidChange = function(obj, keyName) {
   var m = meta(obj, false), proto = m.proto, desc = m.descs[keyName];
   if (proto === obj) return ;
   if (desc && desc.didChange) desc.didChange(obj, keyName);
-  dependentKeysDidChange(obj, keyName);
+  dependentKeysDidChange(obj, keyName, m);
   chainsDidChange(obj, keyName);
   Ember.notifyObservers(obj, keyName);
 };
